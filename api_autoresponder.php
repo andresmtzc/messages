@@ -13,8 +13,11 @@ if (
 ) {
     $sender = $data->query->sender;
 
-    // Use environment variables here for security
-    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://pmcfepoldulhtswwtpkg.supabase.co/rest/v1/messages
+    // 🔍 Debug: log sender to file
+    file_put_contents("debug.txt", "Sender: " . $sender . "\n", FILE_APPEND);
+
+    // Use environment variables
+    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
     if (!$supabaseUrl || !$supabaseAnonKey) {
@@ -23,7 +26,7 @@ if (
         exit;
     }
 
-    // Build query parameters to fetch pending messages for the sender
+    // Build query to fetch pending replies for this sender
     $query = http_build_query([
         'recipient' => 'eq.' . urlencode($sender),
         'status' => 'eq.pending',
@@ -39,7 +42,6 @@ if (
         "Content-Type: application/json"
     ];
 
-    // Initialize cURL to fetch pending replies
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -55,7 +57,7 @@ if (
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Mark this reply as sent to avoid duplicate replies
+            // Mark message as 'sent'
             $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
             curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
             curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
@@ -65,14 +67,14 @@ if (
             curl_close($updateCh);
         }
     } else {
-        // Default reply if no pending messages found
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
     http_response_code(200);
     echo json_encode(["replies" => $messagesToSend]);
 } else {
-    // JSON data incomplete or malformed
     http_response_code(400);
     echo json_encode(["replies" => [["message" => "Error: incomplete JSON data"]]]);
 }
+
+ 
