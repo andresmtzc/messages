@@ -26,9 +26,9 @@ if (
         exit;
     }
 
-    // Build query to fetch pending replies for this sender, using rawurlencode
+    // Build query to fetch pending replies for this sender, **no rawurlencode here**
     $query = http_build_query([
-        'recipient' => 'eq.' . rawurlencode($sender),
+        'recipient' => 'eq.' . $sender,  // Let http_build_query encode correctly
         'status' => 'eq.pending',
         'select' => '*',
         'limit' => 5
