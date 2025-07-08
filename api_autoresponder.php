@@ -2,8 +2,10 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
+// Read raw POST JSON data
 $data = json_decode(file_get_contents("php://input"));
 
+// Check required fields
 if (
     !empty($data->query) &&
     !empty($data->query->sender) &&
@@ -11,9 +13,17 @@ if (
 ) {
     $sender = $data->query->sender;
 
-    $supabaseUrl = 'https://pmcfepoldulhtswwtpkg.supabase.co/rest/v1/messages';
-    $supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2ZlcG9sZHVsaHRzd3d0cGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MzI5MDcsImV4cCI6MjA2NzUwODkwN30.1hzthlKgqNoNrcIIxaImjw19hIRp5WtY4JhNhcOou_o';
+    // Use environment variables here for security
+    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://pmcfepoldulhtswwtpkg.supabase.co/rest/v1/messages
+    $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
+    if (!$supabaseUrl || !$supabaseAnonKey) {
+        http_response_code(500);
+        echo json_encode(["replies" => [["message" => "Server configuration error: missing Supabase credentials."]]]);
+        exit;
+    }
+
+    // Build query parameters to fetch pending messages for the sender
     $query = http_build_query([
         'recipient' => 'eq.' . urlencode($sender),
         'status' => 'eq.pending',
@@ -29,6 +39,7 @@ if (
         "Content-Type: application/json"
     ];
 
+    // Initialize cURL to fetch pending replies
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -44,7 +55,7 @@ if (
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Mark this reply as sent to avoid resending
+            // Mark this reply as sent to avoid duplicate replies
             $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
             curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
             curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
@@ -54,13 +65,14 @@ if (
             curl_close($updateCh);
         }
     } else {
+        // Default reply if no pending messages found
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
     http_response_code(200);
     echo json_encode(["replies" => $messagesToSend]);
 } else {
+    // JSON data incomplete or malformed
     http_response_code(400);
     echo json_encode(["replies" => [["message" => "Error: incomplete JSON data"]]]);
 }
-?>
