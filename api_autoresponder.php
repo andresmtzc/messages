@@ -2,39 +2,26 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Log current timestamp
-$now = date('Y-m-d H:i:s');
-
-// Read raw POST JSON data
+// Read raw POST JSON data (optional, we’ll log it anyway)
 $rawInput = file_get_contents("php://input");
-file_put_contents("debug.txt", "$now - Raw input: $rawInput\n", FILE_APPEND);
+file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Raw input: " . $rawInput . "\n", FILE_APPEND);
 
+// Decode JSON if any (for completeness)
 $data = json_decode($rawInput);
 
-if (!$data) {
-    file_put_contents("debug.txt", "$now - JSON decode failed\n", FILE_APPEND);
-    http_response_code(400);
-    echo json_encode(["replies" => [["message" => "Error: invalid JSON"]]]);
-    exit;
-}
-
-// Log sender if exists
-$sender = $data->query->sender ?? 'no sender';
-file_put_contents("debug.txt", "$now - Sender: $sender\n", FILE_APPEND);
-
-// Use environment variables for security
-$supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
+$supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://pmcfepoldulhtswwtpkg.supabase.co/rest/v1/messages
 $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
 if (!$supabaseUrl || !$supabaseAnonKey) {
-    file_put_contents("debug.txt", "$now - Missing Supabase URL or Anon Key\n", FILE_APPEND);
     http_response_code(500);
-    echo json_encode(["replies" => [["message" => "Server config error: missing credentials"]]]);
+    $errorMsg = "Server configuration error: missing Supabase credentials.";
+    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - ERROR: " . $errorMsg . "\n", FILE_APPEND);
+    echo json_encode(["replies" => [["message" => $errorMsg]]]);
     exit;
 }
 
-// For debug: fetch first 5 messages WITHOUT filtering by recipient or status
-$url = $supabaseUrl . '?select=*&limit=5';
+// Build URL to fetch all messages (limit 10 for debug)
+$testUrl = $supabaseUrl . '?select=*&limit=10';
 
 $headers = [
     "apikey: $supabaseAnonKey",
@@ -42,25 +29,21 @@ $headers = [
     "Content-Type: application/json"
 ];
 
-// Initialize cURL
-$ch = curl_init($url);
+$ch = curl_init($testUrl);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $response = curl_exec($ch);
-if (curl_errno($ch)) {
-    $curlError = curl_error($ch);
-    file_put_contents("debug.txt", "$now - cURL error: $curlError\n", FILE_APPEND);
+
+if(curl_errno($ch)) {
+    $curlErr = curl_error($ch);
+    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - CURL ERROR: " . $curlErr . "\n", FILE_APPEND);
 }
+
 curl_close($ch);
 
-file_put_contents("debug.txt", "$now - Supabase response: $response\n", FILE_APPEND);
+file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Supabase response: " . $response . "\n", FILE_APPEND);
 
+// Return a dummy reply to autoresponder so it doesn't hang
 http_response_code(200);
-echo json_encode([
-    "replies" => [
-        ["message" => "Debug: Received sender $sender"],
-        ["message" => "Debug: Supabase returned: $response"]
-    ]
-]);
-?>
+echo json_encode(["replies" => [["message" => "Debug test complete. Check debug.txt for details."]]]);
