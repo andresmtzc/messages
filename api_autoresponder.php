@@ -2,11 +2,6 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Timestamp logging
-function log_debug($message) {
-    file_put_contents("debug.txt", date("Y-m-d H:i:s") . " - " . $message . "\n", FILE_APPEND);
-}
-
 // Read raw POST input
 $rawInput = file_get_contents("php://input");
 log_debug("Raw input: " . $rawInput);
