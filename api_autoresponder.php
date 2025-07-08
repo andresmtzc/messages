@@ -28,7 +28,7 @@ if (
         exit;
     }
 
-    // Query for pending messages matching the normalized sender in the existing `recipient` column
+    // Query for pending messages matching the normalized sender
     $query = http_build_query([
         'recipient' => 'eq.' . $normalizedSender,
         'status' => 'eq.pending',
@@ -68,9 +68,6 @@ if (
             curl_exec($updateCh);
             curl_close($updateCh);
         }
-    } else {
-        // Fallback if no pending messages found
-        $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
     http_response_code(200);
