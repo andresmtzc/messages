@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: autoresponder-php
-    env: static
-    staticPublishPath: .
-    startCommand: php -S 0.0.0.0:10000
-    port: 10000
