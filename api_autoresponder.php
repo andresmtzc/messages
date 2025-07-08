@@ -2,10 +2,8 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Read raw POST JSON data
 $data = json_decode(file_get_contents("php://input"));
 
-// Check required fields
 if (
     !empty($data->query) &&
     !empty($data->query->sender) &&
@@ -13,10 +11,8 @@ if (
 ) {
     $sender = $data->query->sender;
 
-    // 🔍 Debug: log sender to file
     file_put_contents("debug.txt", "Sender: " . $sender . "\n", FILE_APPEND);
 
-    // Use environment variables
     $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
@@ -26,36 +22,26 @@ if (
         exit;
     }
 
-    // === Debug: log all distinct recipients in DB ===
-    $recipientsUrl = $supabaseUrl . '?select=recipient&distinct=recipient';
+    $senderClean = preg_replace('/\s+/', ' ', trim($sender));
+    file_put_contents("debug.txt", "Cleaned Sender: " . $senderClean . "\n", FILE_APPEND);
+
+    // Build query parameters manually, encode spaces as %20 (not '+')
+    $recipientFilter = 'like.*' . $senderClean . '*';
+    $recipientFilterEncoded = str_replace('+', '%20', rawurlencode($recipientFilter));
+
+    $query = 'recipient=' . $recipientFilterEncoded
+           . '&status=eq.pending'
+           . '&select=*'
+           . '&limit=5';
+
+    $url = $supabaseUrl . '?' . $query;
+    file_put_contents("debug.txt", "Query URL: " . $url . "\n", FILE_APPEND);
+
     $headers = [
         "apikey: $supabaseAnonKey",
         "Authorization: Bearer $supabaseAnonKey",
         "Content-Type: application/json"
     ];
-    $ch2 = curl_init($recipientsUrl);
-    curl_setopt($ch2, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
-    $recipientsResponse = curl_exec($ch2);
-    curl_close($ch2);
-    file_put_contents("debug.txt", "All recipients in DB: " . $recipientsResponse . "\n", FILE_APPEND);
-
-    // Clean sender string: normalize spaces, trim
-    $senderClean = preg_replace('/\s+/', ' ', trim($sender));
-    file_put_contents("debug.txt", "Cleaned Sender: " . $senderClean . "\n", FILE_APPEND);
-
-    // Build query with 'like' filter for partial matching
-    $query = http_build_query([
-        'recipient' => 'like.*' . $senderClean . '*',
-        'status' => 'eq.pending',
-        'select' => '*',
-        'limit' => 5
-    ]);
-
-    $url = $supabaseUrl . '?' . $query;
-
-    // Debug log the final query URL
-    file_put_contents("debug.txt", "Query URL: " . $url . "\n", FILE_APPEND);
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -64,7 +50,6 @@ if (
     $response = curl_exec($ch);
     curl_close($ch);
 
-    // Log response for debugging
     file_put_contents("debug.txt", "Supabase response: " . $response . "\n", FILE_APPEND);
 
     $replies = json_decode($response, true);
