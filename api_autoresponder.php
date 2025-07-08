@@ -13,27 +13,26 @@ if (
 ) {
     $sender = $data->query->sender;
 
-    // 🔍 Debug: log sender to file
+    // 🔍 Log sender
     file_put_contents("debug.txt", "Sender: " . $sender . "\n", FILE_APPEND);
 
-    // Use environment variables
-    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
+    // Use env variables
+    $supabaseUrl = getenv('SUPABASE_URL');  // should end in /rest/v1/messages
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
     if (!$supabaseUrl || !$supabaseAnonKey) {
         http_response_code(500);
-        echo json_encode(["replies" => [["message" => "Server configuration error: missing Supabase credentials."]]]);
+        echo json_encode(["replies" => [["message" => "Missing Supabase credentials."]]]);
         exit;
     }
 
-    // Build query to fetch pending replies for this sender
+    // Build query
     $query = http_build_query([
         'recipient' => 'eq.' . urlencode($sender),
         'status' => 'eq.pending',
         'select' => '*',
         'limit' => 5
     ]);
-
     $url = $supabaseUrl . '?' . $query;
 
     $headers = [
@@ -42,31 +41,38 @@ if (
         "Content-Type: application/json"
     ];
 
+    // 🔍 Fetch pending messages
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
     $response = curl_exec($ch);
     curl_close($ch);
 
-    $replies = json_decode($response, true);
+    // 🔍 Log full Supabase JSON response
+    file_put_contents("debug.txt", "Supabase response: " . $response . "\n", FILE_APPEND);
 
+    $replies = json_decode($response, true);
     $messagesToSend = [];
 
     if ($replies && count($replies) > 0) {
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Mark message as 'sent'
-            $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
+            // 🔃 Update message status to 'sent'
+            $updateUrl = $supabaseUrl . '?id=eq.' . $reply['id'];
+            $updateCh = curl_init($updateUrl);
             curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
             curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($updateCh, CURLOPT_POSTFIELDS, json_encode(['status' => 'sent']));
             curl_setopt($updateCh, CURLOPT_RETURNTRANSFER, true);
-            curl_exec($updateCh);
+            $updateResp = curl_exec($updateCh);
             curl_close($updateCh);
+
+            // 🔍 Log updated ID
+            file_put_contents("debug.txt", "Updated message ID: " . $reply['id'] . "\n", FILE_APPEND);
         }
     } else {
+        // Default fallback
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
@@ -76,5 +82,3 @@ if (
     http_response_code(400);
     echo json_encode(["replies" => [["message" => "Error: incomplete JSON data"]]]);
 }
-
- 
