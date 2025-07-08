@@ -2,14 +2,8 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Timestamp logging
-function log_debug($message) {
-    file_put_contents("debug.txt", date("Y-m-d H:i:s") . " - " . $message . "\n", FILE_APPEND);
-}
-
 // Read raw POST input
 $rawInput = file_get_contents("php://input");
-log_debug("Raw input: " . $rawInput);
 
 $data = json_decode($rawInput);
 
@@ -20,11 +14,9 @@ if (
     isset($data->query->message)
 ) {
     $rawSender = $data->query->sender;
-    log_debug("Raw sender: " . $rawSender);
 
     // Normalize sender (remove non-numeric characters)
     $normalizedSender = preg_replace('/\D/', '', $rawSender);
-    log_debug("Normalized sender: " . $normalizedSender);
 
     // Supabase config
     $supabaseUrl = getenv('SUPABASE_URL');
@@ -45,7 +37,6 @@ if (
     ]);
 
     $url = $supabaseUrl . '?' . $query;
-    log_debug("Query URL: " . $url);
 
     $headers = [
         "apikey: $supabaseAnonKey",
@@ -60,7 +51,6 @@ if (
     $response = curl_exec($ch);
     curl_close($ch);
 
-    log_debug("Supabase response: " . $response);
     $replies = json_decode($response, true);
 
     $messagesToSend = [];
@@ -86,7 +76,6 @@ if (
     http_response_code(200);
     echo json_encode(["replies" => $messagesToSend]);
 } else {
-    log_debug("Invalid or incomplete JSON received.");
     http_response_code(400);
     echo json_encode(["replies" => [["message" => "Error: Incomplete JSON."]]]);
 }
