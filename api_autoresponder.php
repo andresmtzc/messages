@@ -2,47 +2,50 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Read raw POST JSON data
+// Timestamp logging
+function log_debug($message) {
+    file_put_contents("debug.txt", date("Y-m-d H:i:s") . " - " . $message . "\n", FILE_APPEND);
+}
+
+// Read raw POST input
 $rawInput = file_get_contents("php://input");
+log_debug("Raw input: " . $rawInput);
+
 $data = json_decode($rawInput);
 
-file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Raw input: " . $rawInput . "\n", FILE_APPEND);
-
-// Validate required fields
+// Validate input
 if (
-    !empty($data->query) &&
-    !empty($data->query->sender) &&
-    !empty($data->query->message)
+    isset($data->query) &&
+    isset($data->query->sender) &&
+    isset($data->query->message)
 ) {
     $rawSender = $data->query->sender;
+    log_debug("Raw sender: " . $rawSender);
 
-    // Normalize sender by removing spaces, +, hyphens etc
-    $normalizedSender = preg_replace('/[^0-9]/', '', $rawSender);
+    // Normalize sender (remove non-numeric characters)
+    $normalizedSender = preg_replace('/\D/', '', $rawSender);
+    log_debug("Normalized sender: " . $normalizedSender);
 
-    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Raw sender: $rawSender\n", FILE_APPEND);
-    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Normalized sender: $normalizedSender\n", FILE_APPEND);
-
-    // Supabase REST API URL and anon key - set these as environment variables for security
-    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
+    // Supabase config
+    $supabaseUrl = getenv('SUPABASE_URL');
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
     if (!$supabaseUrl || !$supabaseAnonKey) {
         http_response_code(500);
-        echo json_encode(["replies" => [["message" => "Server error: missing Supabase credentials."]]]);
+        echo json_encode(["replies" => [["message" => "Server config error."]]]);
         exit;
     }
 
-    // Build query to get pending messages for normalized recipient
-    $queryParams = http_build_query([
-        'recipient_norm' => 'eq.' . $normalizedSender,
+    // Query for pending messages matching the normalized sender in the existing `recipient` column
+    $query = http_build_query([
+        'recipient' => 'eq.' . $normalizedSender,
         'status' => 'eq.pending',
         'select' => '*',
         'limit' => 5
     ]);
 
-    $requestUrl = $supabaseUrl . '?' . $queryParams;
-
-    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Query URL: $requestUrl\n", FILE_APPEND);
+    $url = $supabaseUrl . '?' . $query;
+    log_debug("Query URL: " . $url);
 
     $headers = [
         "apikey: $supabaseAnonKey",
@@ -51,41 +54,40 @@ if (
     ];
 
     // Fetch pending messages
-    $ch = curl_init($requestUrl);
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     $response = curl_exec($ch);
     curl_close($ch);
 
-    file_put_contents("debug.txt", date('Y-m-d H:i:s') . " - Supabase response: $response\n", FILE_APPEND);
-
+    log_debug("Supabase response: " . $response);
     $replies = json_decode($response, true);
 
     $messagesToSend = [];
 
-    if ($replies && count($replies) > 0) {
+    if (is_array($replies) && count($replies) > 0) {
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Update status to 'sent' to avoid resending
-            $updateUrl = $supabaseUrl . '?id=eq.' . $reply['id'];
-            $chUpdate = curl_init($updateUrl);
-            curl_setopt($chUpdate, CURLOPT_CUSTOMREQUEST, "PATCH");
-            curl_setopt($chUpdate, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($chUpdate, CURLOPT_POSTFIELDS, json_encode(['status' => 'sent']));
-            curl_setopt($chUpdate, CURLOPT_RETURNTRANSFER, true);
-            curl_exec($chUpdate);
-            curl_close($chUpdate);
+            // Update status to 'sent'
+            $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
+            curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
+            curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($updateCh, CURLOPT_POSTFIELDS, json_encode(['status' => 'sent']));
+            curl_setopt($updateCh, CURLOPT_RETURNTRANSFER, true);
+            curl_exec($updateCh);
+            curl_close($updateCh);
         }
     } else {
-        // Fallback message if no pending replies found
+        // Fallback if no pending messages found
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
     http_response_code(200);
     echo json_encode(["replies" => $messagesToSend]);
 } else {
+    log_debug("Invalid or incomplete JSON received.");
     http_response_code(400);
-    echo json_encode(["replies" => [["message" => "Error: incomplete JSON data"]]]);
+    echo json_encode(["replies" => [["message" => "Error: Incomplete JSON."]]]);
 }
 ?>
