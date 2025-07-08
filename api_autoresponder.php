@@ -2,10 +2,8 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Read raw POST JSON data
 $data = json_decode(file_get_contents("php://input"));
 
-// Check required fields
 if (
     !empty($data->query) &&
     !empty($data->query->sender) &&
@@ -13,11 +11,9 @@ if (
 ) {
     $sender = $data->query->sender;
 
-    // 🔍 Debug: log sender to file
     file_put_contents("debug.txt", "Sender: " . $sender . "\n", FILE_APPEND);
 
-    // Use environment variables for security
-    $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
+    $supabaseUrl = getenv('SUPABASE_URL');
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
     if (!$supabaseUrl || !$supabaseAnonKey) {
@@ -26,18 +22,10 @@ if (
         exit;
     }
 
-    // Build query to fetch pending replies for this exact sender
-    // Note: No urlencode on 'eq.' part, only on value
-    $query = http_build_query([
-        'recipient' => 'eq.' . $sender,
-        'status' => 'eq.pending',
-        'select' => '*',
-        'limit' => 5
-    ]);
-
+    $senderEncoded = rawurlencode($sender);
+    $query = 'recipient=eq.' . $senderEncoded . '&status=eq.pending&select=*&limit=5';
     $url = $supabaseUrl . '?' . $query;
 
-    // Debug URL
     file_put_contents("debug.txt", "Query URL: " . $url . "\n", FILE_APPEND);
 
     $headers = [
@@ -63,7 +51,6 @@ if (
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Mark message as 'sent' to avoid duplicates
             $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
             curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
             curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
@@ -73,14 +60,12 @@ if (
             curl_close($updateCh);
         }
     } else {
-        // Default reply if no pending messages found
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
     http_response_code(200);
     echo json_encode(["replies" => $messagesToSend]);
 } else {
-    // JSON data incomplete or malformed
     http_response_code(400);
     echo json_encode(["replies" => [["message" => "Error: incomplete JSON data"]]]);
 }
