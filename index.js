@@ -5,10 +5,13 @@ const bodyParser = require('body-parser');
 const app = express();
 app.use(bodyParser.json());
 
-const SUPABASE_URL = 'https://pmcfepoldulhtswwtpkg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtY2ZlcG9sZHVsaHRzd3d0cGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MzI5MDcsImV4cCI6MjA2NzUwODkwN30.1hzthlKgqNoNrcIIxaImjw19hIRp5WtY4JhNhcOou_o';
+// Use environment variables for security and flexibility
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 app.post('/telegram-webhook', async (req, res) => {
+  console.log('Webhook hit with body:', JSON.stringify(req.body));
+
   const update = req.body;
 
   if (update.message) {
@@ -23,7 +26,7 @@ app.post('/telegram-webhook', async (req, res) => {
     };
 
     try {
-      await axios.post(`${SUPABASE_URL}/rest/v1/messages`, payload, {
+      const response = await axios.post(`${SUPABASE_URL}/rest/v1/messages`, payload, {
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
@@ -32,7 +35,7 @@ app.post('/telegram-webhook', async (req, res) => {
         }
       });
 
-      console.log("✅ Message saved to Supabase:", payload);
+      console.log("✅ Message saved to Supabase:", response.data);
     } catch (error) {
       console.error("❌ Error saving to Supabase:", error.response?.data || error.message);
     }
