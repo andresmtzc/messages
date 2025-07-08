@@ -11,27 +11,24 @@ if (
     !empty($data->query->sender) &&
     !empty($data->query->message)
 ) {
-    // Normalize sender (optional: remove spaces etc. if you want)
     $sender = $data->query->sender;
-    // Example normalization if needed:
-    // $sender = preg_replace('/[^\+\d]/', '', $sender);
 
-    // Debug sender log
+    // 🔍 Debug: log sender to file
     file_put_contents("debug.txt", "Sender: " . $sender . "\n", FILE_APPEND);
 
-    // Use environment variables (set these in Render or your environment)
+    // Use environment variables
     $supabaseUrl = getenv('SUPABASE_URL');  // e.g. https://yourproject.supabase.co/rest/v1/messages
     $supabaseAnonKey = getenv('SUPABASE_ANON_KEY');
 
     if (!$supabaseUrl || !$supabaseAnonKey) {
         http_response_code(500);
-        echo json_encode(["replies" => [["message" => "Server config error: missing Supabase credentials."]]]);
+        echo json_encode(["replies" => [["message" => "Server configuration error: missing Supabase credentials."]]]);
         exit;
     }
 
-    // Build query to fetch pending replies for this sender
+    // Build query to fetch pending replies for this sender, using rawurlencode
     $query = http_build_query([
-        'recipient' => 'eq.' . $sender,  // <-- FIXED: no urlencode here
+        'recipient' => 'eq.' . rawurlencode($sender),
         'status' => 'eq.pending',
         'select' => '*',
         'limit' => 5
@@ -39,7 +36,7 @@ if (
 
     $url = $supabaseUrl . '?' . $query;
 
-    // Debug query URL log
+    // 🔍 Debug: log full query URL
     file_put_contents("debug.txt", "Query URL: " . $url . "\n", FILE_APPEND);
 
     $headers = [
@@ -55,7 +52,7 @@ if (
     $response = curl_exec($ch);
     curl_close($ch);
 
-    // Debug response log
+    // 🔍 Debug: log Supabase response
     file_put_contents("debug.txt", "Supabase response: " . $response . "\n", FILE_APPEND);
 
     $replies = json_decode($response, true);
@@ -66,7 +63,7 @@ if (
         foreach ($replies as $reply) {
             $messagesToSend[] = ["message" => $reply['message']];
 
-            // Mark message as 'sent' to avoid duplicate replies
+            // Mark message as 'sent'
             $updateCh = curl_init($supabaseUrl . '?id=eq.' . $reply['id']);
             curl_setopt($updateCh, CURLOPT_CUSTOMREQUEST, "PATCH");
             curl_setopt($updateCh, CURLOPT_HTTPHEADER, $headers);
@@ -76,7 +73,6 @@ if (
             curl_close($updateCh);
         }
     } else {
-        // Default reply if no pending messages found
         $messagesToSend[] = ["message" => "Thanks for your message! We'll get back to you soon."];
     }
 
